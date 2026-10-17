@@ -1,0 +1,56 @@
+# Sitio público (Entorno B): descarga precios públicos, genera el sitio estático y lo
+# publica en GitHub Pages. Nunca usa datos de AMEXGAS (PRIVATE_MODE=0, sin base privada).
+name: Actualizar sitio público
+
+on:
+  schedule:
+    # Lunes a viernes 13:30 y 23:30 UTC (08:30 y 18:30 en Houston en horario de verano).
+    - cron: "30 13 * * 1-5"
+    - cron: "30 23 * * 1-5"
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      PRIVATE_MODE: "0"
+      PUBLIC_SITE: "1"
+      NOTIFY: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: Descargar precios públicos
+        # Si una fuente falla, el sitio se publica igual y muestra la alerta en «Calidad de datos».
+        run: npm run update:public || echo "::warning::Alguna fuente falló; ver la bitácora de este paso."
+      - name: Cargar notas de mercado verificadas
+        run: for f in notas/*.json; do node scripts/add-notes.js --file "$f"; done
+      - run: npm run build:static
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

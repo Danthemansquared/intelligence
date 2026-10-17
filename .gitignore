@@ -1,0 +1,10 @@
+node_modules/
+data/
+private/
+config/settings.json
+config/roles.json
+*.log
+.DS_Store
+exports/
+dist/
+.claude/

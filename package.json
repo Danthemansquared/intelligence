@@ -1,0 +1,27 @@
+{
+  "name": "mont-belvieu-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Dashboard ejecutivo de precios de propano y butano de Mont Belvieu y crudo, con validación privada frente a AMEXGAS.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "start": "node src/server/server.js",
+    "update": "node src/ingest/run.js",
+    "import-official": "node src/private/import-official.js",
+    "add-notes": "node scripts/add-notes.js",
+    "export": "node scripts/export.js",
+    "test": "node --test test/*.test.js",
+    "private-report": "node scripts/private-report.js",
+    "crosscheck-official": "node scripts/crosscheck-official.js",
+    "demo-data": "PRIVATE_DB=data/demo-sintetico.db node scripts/make-synthetic-official.js",
+    "start:demo": "PRIVATE_DB=data/demo-sintetico.db PORT=3101 node src/server/server.js",
+    "build:static": "PRIVATE_MODE=0 PUBLIC_SITE=1 node scripts/build-static.js",
+    "update:public": "PRIVATE_MODE=0 PUBLIC_SITE=1 node src/ingest/run.js"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0"
+  }
+}

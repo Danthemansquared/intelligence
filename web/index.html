@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Mont Belvieu · Precios</title>
+  <meta name="description" content="Precios de propano, butano y crudo de Mont Belvieu, con validación privada frente a AMEXGAS.">
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Saltar al contenido</a>
+  <header class="top">
+    <div class="wrap top-inner">
+      <div class="brand">
+        <h1>Mont Belvieu</h1>
+        <p class="sub" id="subtitle">Propano, butano y crudo</p>
+      </div>
+      <div class="top-meta">
+        <span class="badge" id="role-badge" hidden></span>
+        <span class="meta" id="last-update"></span>
+      </div>
+    </div>
+    <nav class="wrap tabs" aria-label="Secciones">
+      <a href="#resumen" class="tab">Resumen</a>
+      <a href="#glp" class="tab">GLP</a>
+      <a href="#precision" class="tab" data-private hidden>Precisión vs. AMEXGAS</a>
+      <a href="#crudo" class="tab">Crudo</a>
+      <a href="#mercado" class="tab">¿Qué movió el mercado?</a>
+      <a href="#datos" class="tab">Calidad de datos</a>
+    </nav>
+  </header>
+
+  <main class="wrap" id="main">
+    <section id="resumen" aria-labelledby="h-resumen">
+      <h2 id="h-resumen" class="section-title">Resumen</h2>
+      <p class="section-lede" id="resumen-lede"><span class="sk sk-lede"></span></p>
+      <div class="grid product-grid" id="product-cards" aria-busy="true">
+        <div class="card"><span class="sk sk-title"></span><span class="sk sk-num"></span><span class="sk sk-line"></span><span class="sk sk-block"></span></div>
+        <div class="card"><span class="sk sk-title"></span><span class="sk sk-num"></span><span class="sk sk-line"></span><span class="sk sk-block"></span></div>
+      </div>
+      <div class="grid crude-grid" id="crude-cards">
+        <div class="card"><span class="sk sk-title"></span><span class="sk sk-num"></span><span class="sk sk-line"></span></div>
+        <div class="card"><span class="sk sk-title"></span><span class="sk sk-num"></span><span class="sk sk-line"></span></div>
+      </div>
+      <div id="alerts"></div>
+    </section>
+
+    <section id="glp" aria-labelledby="h-glp">
+      <div class="section-head">
+        <h2 id="h-glp" class="section-title">Mercado de GLP</h2>
+        <div class="controls">
+          <div class="segmented" role="radiogroup" aria-label="Producto" id="glp-product"></div>
+          <div class="segmented" role="radiogroup" aria-label="Periodo" id="glp-range"></div>
+        </div>
+      </div>
+      <p class="section-lede" id="glp-lede"></p>
+      <div class="card chart-card"><div class="chart" id="glp-chart"></div><div class="legend" id="glp-legend"></div></div>
+    </section>
+
+    <section id="precision" aria-labelledby="h-precision" data-private hidden>
+      <div class="section-head">
+        <h2 id="h-precision" class="section-title">Precisión de las fuentes vs. AMEXGAS</h2>
+        <div class="controls">
+          <div class="segmented" role="radiogroup" aria-label="Producto" id="prec-product"></div>
+          <div class="segmented" role="radiogroup" aria-label="Fuente" id="prec-source"></div>
+        </div>
+      </div>
+      <p class="private-note">Sección privada. Contiene información derivada de precios oficiales; no la comparta fuera del grupo autorizado.</p>
+      <p class="section-lede" id="prec-lede"></p>
+      <div class="grid kpi-grid" id="prec-kpis"></div>
+      <div id="prec-index"></div>
+      <div id="prec-daily">
+      <div class="card">
+        <div class="card-head">
+          <h3 id="day-title">Diferencia vs. AMEXGAS por día</h3>
+          <label class="date-pick">Consultar fecha <input type="date" id="day-date"></label>
+        </div>
+        <div id="day-detail"></div>
+      </div>
+      <div class="card chart-card">
+        <div class="card-head"><h3 id="diff-title">Diferencia diaria</h3><div class="segmented small" role="radiogroup" aria-label="Periodo" id="diff-range"></div></div>
+        <div class="chart" id="diff-chart"></div>
+        <p class="footnote">Positivo: la fuente digital está por encima de AMEXGAS. Negativo: por debajo. La banda verde marca el rango normal propuesto (semáforo verde).</p>
+      </div>
+      <div class="grid two">
+        <div class="card"><h3>Tolerancia recomendada</h3><div id="tolerance"></div></div>
+        <div class="card"><h3>¿Cuándo pierde precisión?</h3><div id="weak-spots"></div></div>
+      </div>
+      <div class="card"><h3>Comparativo de fuentes</h3><div id="prec-table"></div></div>
+      <div class="card"><h3>Precisión por año</h3><div id="by-year"></div></div>
+      </div>
+      <details class="card glossary">
+        <summary>¿Qué significan estas métricas?</summary>
+        <dl>
+          <dt>Diferencia vs. AMEXGAS</dt><dd>Precio digital menos precio oficial, en cUSD/gal, para el mismo día de cotización.</dd>
+          <dt>Error medio absoluto (MAE)</dt><dd>Promedio de la diferencia sin signo: cuánto se equivoca la fuente en un día típico.</dd>
+          <dt>Sesgo</dt><dd>Promedio de la diferencia con signo. Positivo: la fuente tiende a estar arriba; negativo: abajo.</dd>
+          <dt>P90 / P95</dt><dd>El 90% (o 95%) de los días la diferencia absoluta fue menor o igual a este valor.</dd>
+          <dt>Acierto de dirección</dt><dd>Porcentaje de días en que la fuente subió o bajó en el mismo sentido que AMEXGAS.</dd>
+          <dt>Estimación de butano</dt><dd>Precio del propano del día × la relación butano/propano de AMEXGAS de los últimos 20 días. Se mide su error contra AMEXGAS igual que cualquier otra fuente.</dd>
+          <dt>Índice de precios de EE. UU.</dt><dd>Índice mensual del BLS para el butano. Sirve para ver la tendencia; se evalúa qué tan bien sigue los cambios mensuales de AMEXGAS.</dd>
+          <dt>Cobertura</dt><dd>Días con dato digital y oficial el mismo día, entre los días con dato oficial en el periodo de la fuente.</dd>
+        </dl>
+      </details>
+    </section>
+
+    <section id="crudo" aria-labelledby="h-crudo">
+      <div class="section-head">
+        <h2 id="h-crudo" class="section-title">Petróleo crudo</h2>
+        <div class="controls"><div class="segmented" role="radiogroup" aria-label="Periodo" id="crude-range"></div></div>
+      </div>
+      <p class="section-lede" id="crude-lede"></p>
+      <div class="card chart-card"><div class="chart" id="crude-chart"></div><div class="legend" id="crude-legend"></div>
+        <p class="footnote">El crudo se cotiza en USD por barril y no es directamente comparable con el GLP (cUSD/gal). Se muestra como contexto, no como referencia oficial.</p></div>
+    </section>
+
+    <section id="mercado" aria-labelledby="h-mercado">
+      <h2 id="h-mercado" class="section-title">¿Qué movió el mercado?</h2>
+      <p class="section-lede">Hechos y datos públicos que coinciden con los movimientos recientes. Coincidir en el tiempo no demuestra causa.</p>
+      <div class="grid two" id="market-items"></div>
+      <div class="card" id="market-context"></div>
+    </section>
+
+    <section id="datos" aria-labelledby="h-datos">
+      <div class="section-head">
+        <h2 id="h-datos" class="section-title">Calidad y actualización de datos</h2>
+        <div class="controls">
+          <a class="button primary" href="/api/export?format=xlsx" download>Exportar Excel</a>
+          <a class="button" href="/api/export?format=csv" download>Exportar CSV</a>
+        </div>
+      </div>
+      <p class="section-lede" id="quality-lede"></p>
+      <div class="card"><div id="quality-table"></div></div>
+    </section>
+  </main>
+
+  <footer class="wrap foot">
+    <p>Precios digitales de fuentes públicas. Los precios oficiales AMEXGAS se consultan sólo en el entorno privado y nunca se publican ni se envían a terceros.</p>
+  </footer>
+
+  <div id="tooltip" class="tooltip" role="status" aria-live="polite" hidden></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
