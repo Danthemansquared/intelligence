@@ -181,7 +181,7 @@ section:first-child { padding-top: 40px; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .segmented .thumb { background: #636366; } }
 .segmented:empty { display: none; }
 .segmented.small button { min-height: 24px; padding: 0 10px; font-size: 12px; }
-.button { display: inline-flex; align-items: center; min-height: 32px; font-size: 14px; font-weight: 500; letter-spacing: -0.015em; padding: 0 16px; border-radius: 999px; background: var(--fill-strong); color: var(--ink); transition: background-color 200ms var(--ease), transform 150ms var(--ease); }
+.button { display: inline-flex; align-items: center; border: 0; font-family: inherit; cursor: pointer; min-height: 32px; font-size: 14px; font-weight: 500; letter-spacing: -0.015em; padding: 0 16px; border-radius: 999px; background: var(--fill-strong); color: var(--ink); transition: background-color 200ms var(--ease), transform 150ms var(--ease); }
 .button.primary { background: var(--accent); color: #fff; }
 .button:hover { text-decoration: none; background: color-mix(in srgb, var(--fill-strong) 80%, var(--ink) 8%); }
 .button.primary:hover { background: color-mix(in srgb, var(--accent) 88%, #000); }
