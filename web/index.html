@@ -22,6 +22,7 @@
       <div class="top-meta">
         <span class="badge" id="role-badge" hidden></span>
         <span class="meta" id="last-update"></span>
+        <button type="button" class="link-button" id="sign-out" hidden>Cerrar sesión</button>
       </div>
     </div>
     <nav class="wrap tabs" aria-label="Secciones">
@@ -141,6 +142,18 @@
   <footer class="wrap foot">
     <p>Precios digitales de fuentes públicas. Los precios oficiales AMEXGAS se consultan sólo en el entorno privado y nunca se publican ni se envían a terceros.</p>
   </footer>
+
+ <div id="gate" class="gate" hidden>
+    <form id="gate-form" class="gate-card" autocomplete="on">
+      <h1>Intelligence</h1>
+      <p>Ingresa para ver el tablero.</p>
+      <label>Usuario<input id="gate-user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+      <label>Contraseña<input id="gate-pass" name="password" type="password" autocomplete="current-password" required></label>
+      <label class="remember"><input id="gate-remember" type="checkbox" checked> Recordar en este dispositivo</label>
+      <p id="gate-error" class="gate-error" role="alert" hidden>Usuario o contraseña incorrectos.</p>
+      <button id="gate-submit" class="button primary" type="submit">Entrar</button>
+    </form>
+  </div>
 
   <div id="tooltip" class="tooltip" role="status" aria-live="polite" hidden></div>
   <script type="module" src="app.js"></script>

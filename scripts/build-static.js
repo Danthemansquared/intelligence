@@ -8,9 +8,16 @@ import { ROOT, settings } from '../src/config.js';
 import { routes } from '../src/server/public-api.js';
 import { PRICE_PRODUCTS, SOURCES } from '../src/sources/index.js';
 import { addMonths, todayHouston } from '../src/core/dates.js';
+import { deriveKey, encrypt, meta } from './site-crypto.js';
 
 if (settings.privateMode || process.env.PUBLIC_SITE !== '1') {
   console.error('El sitio público se genera sólo con PRIVATE_MODE=0 y PUBLIC_SITE=1.');
+  process.exit(1);
+}
+const { SITE_USER, SITE_PASSWORD } = process.env;
+const PROTECTED = Boolean(SITE_USER && SITE_PASSWORD);
+if (!PROTECTED && process.env.ALLOW_UNPROTECTED !== '1') {
+  console.error('Falta SITE_USER / SITE_PASSWORD: no se publica un sitio sin contraseña (ALLOW_UNPROTECTED=1 sólo para pruebas locales).');
   process.exit(1);
 }
 
@@ -29,8 +36,10 @@ html = html.replace('<meta charset="utf-8">', `<meta charset="utf-8">
   <meta name="robots" content="noindex, nofollow">`)
   .replace('<title>Mont Belvieu · Precios</title>', '<title>Intelligence</title>')
   .replace(/<meta name="description"[^>]*>/, '')
-  .replace('href="/api/export?format=xlsx"', 'href="data/precios-digitales.xlsx"')
-  .replace('href="/api/export?format=csv"', 'href="data/precios-digitales.csv"');
+  .replace('href="/api/export?format=xlsx"', 'href="data/precios-digitales.xlsx" data-file="precios-digitales.xlsx"')
+  .replace('href="/api/export?format=csv"', 'href="data/precios-digitales.csv" data-file="precios-digitales.csv"');
+// Con contraseña, nada del tablero se muestra hasta desbloquear.
+if (PROTECTED) html = html.replace('<body>', '<body class="locked">');
 fs.writeFileSync(path.join(OUT, 'index.html'), html);
 
 // 2. Datos (mismas respuestas que la API pública)
@@ -48,5 +57,18 @@ for (const format of ['csv', 'xlsx']) {
 }
 fs.writeFileSync(path.join(OUT, '.nojekyll'), '');
 
+// 3. Cifrado: cada archivo de datos se reemplaza por su versión .bin cifrada.
+if (PROTECTED) {
+  const key = deriveKey(SITE_USER, SITE_PASSWORD);
+  for (const f of fs.readdirSync(DATA)) {
+    const file = path.join(DATA, f);
+    fs.writeFileSync(`${file}.bin`, encrypt(key, fs.readFileSync(file)));
+    fs.rmSync(file);
+  }
+  fs.writeFileSync(path.join(DATA, 'meta.json'), JSON.stringify(meta(key, SITE_USER)));
+} else {
+  fs.writeFileSync(path.join(DATA, 'meta.json'), JSON.stringify({ protected: false }));
+}
+
 const size = fs.readdirSync(DATA).reduce((a, f) => a + fs.statSync(path.join(DATA, f)).size, 0);
-console.log(`Sitio público generado en dist/ (${(size / 1024).toFixed(0)} KB de datos).`);
+console.log(`Sitio público generado en dist/ (${(size / 1024).toFixed(0)} KB de datos, ${PROTECTED ? 'cifrados con contraseña' : 'SIN contraseña'}).`);

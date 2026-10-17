@@ -63,7 +63,9 @@ El importador sólo imprime conteos y fechas. Descarta fechas futuras, valores f
 
 ## Sitio público (GitHub Pages)
 
-`.github/workflows/pages.yml` publica la **vista general** (sin datos oficiales) de lunes a viernes: descarga precios públicos, carga las notas de `notas/` y genera el sitio con `npm run build:static` (`PRIVATE_MODE=0`, `PUBLIC_SITE=1`). Excluye fuentes cuyos términos no permiten redistribución y pide a los buscadores no indexarlo. Para forzar una actualización: pestaña **Actions → Actualizar sitio público → Run workflow**.
+`.github/workflows/pages.yml` publica la **vista general** (sin datos oficiales) de lunes a viernes: descarga precios públicos, carga las notas de `notas/` y genera el sitio con `npm run build:static` (`PRIVATE_MODE=0`, `PUBLIC_SITE=1`). Excluye fuentes cuyos términos no permiten redistribución y pide a los buscadores no indexarlo.
+
+**Acceso con contraseña:** todos los archivos de datos se publican cifrados (AES-256-GCM, llave PBKDF2-SHA256 de 600,000 iteraciones derivada de usuario + contraseña); el navegador los descifra tras el inicio de sesión. El usuario y la contraseña viven sólo en los secretos del repositorio `SITE_USER` y `SITE_PASSWORD` (Settings → Secrets and variables → Actions); para cambiarlos, edite esos secretos y ejecute el flujo. Sin secretos, el flujo no publica nada. Para forzar una actualización: pestaña **Actions → Actualizar sitio público → Run workflow**.
 
 ## Seguridad y confidencialidad
 

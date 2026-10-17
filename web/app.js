@@ -19,14 +19,106 @@ const FRESH = { al_dia: ['verde', 'Al día'], atrasada: ['amarillo', 'Atrasada']
 const STATIC = document.querySelector('meta[name="app-mode"]')?.content === 'static';
 const staticCache = new Map();
 
+// ─── Acceso con contraseña del sitio público ───
+// Los datos publicados están cifrados (AES-256-GCM); la llave se deriva en el navegador
+// del usuario y la contraseña (PBKDF2-SHA256), igual que en scripts/site-crypto.js.
+const site = { meta: null, key: null };
+const enc = new TextEncoder();
+const KEY_STORE = 'intelligence.key';
+const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+async function deriveSiteKey(user, password) {
+  const u = user.trim().toLowerCase();
+  const salt = (await crypto.subtle.digest('SHA-256', enc.encode(`intelligence-site:${u}`))).slice(0, 16);
+  const base = await crypto.subtle.importKey('raw', enc.encode(`${u}\n${password}`), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: site.meta.iterations, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, true, ['decrypt']);
+}
+
+async function decryptBuf(key, buf) {
+  const a = new Uint8Array(buf);
+  return crypto.subtle.decrypt({ name: 'AES-GCM', iv: a.slice(0, 12) }, key, a.slice(12));
+}
+
+async function keyWorks(key) {
+  try { return new TextDecoder().decode(await decryptBuf(key, unb64(site.meta.check))) === 'intelligence-ok'; } catch { return false; }
+}
+
+/** Muestra la pantalla de acceso y resuelve cuando la llave es correcta. */
+async function unlock() {
+  site.meta = await (await fetch('data/meta.json', { cache: 'no-cache' })).json();
+  if (!site.meta.protected) return;
+  try {
+    const saved = localStorage.getItem(KEY_STORE);
+    if (saved) {
+      const key = await crypto.subtle.importKey('raw', unb64(saved), 'AES-GCM', true, ['decrypt']);
+      if (await keyWorks(key)) { site.key = key; document.body.classList.remove('locked'); showSignOut(); return; }
+      localStorage.removeItem(KEY_STORE);
+    }
+  } catch { /* almacenamiento no disponible: se pide contraseña */ }
+  const gate = $('#gate');
+  gate.hidden = false;
+  $('#gate-user').focus();
+  await new Promise((resolve) => {
+    $('#gate-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = $('#gate-submit');
+      btn.disabled = true; btn.textContent = 'Verificando…';
+      $('#gate-error').hidden = true;
+      const key = await deriveSiteKey($('#gate-user').value, $('#gate-pass').value);
+      if (await keyWorks(key)) {
+        site.key = key;
+        if ($('#gate-remember').checked) {
+          try { localStorage.setItem(KEY_STORE, b64(await crypto.subtle.exportKey('raw', key))); } catch { /* sin almacenamiento */ }
+        }
+        gate.hidden = true;
+        document.body.classList.remove('locked');
+        showSignOut();
+        resolve();
+      } else {
+        $('#gate-error').hidden = false;
+        $('#gate-pass').select();
+      }
+      btn.disabled = false; btn.textContent = 'Entrar';
+    });
+  });
+}
+
+function showSignOut() {
+  const b = $('#sign-out');
+  if (!b) return;
+  b.hidden = false;
+  b.addEventListener('click', () => { try { localStorage.removeItem(KEY_STORE); } catch { /* nada */ } location.reload(); });
+}
+
 async function getJson(url) {
   if (staticCache.has(url)) return staticCache.get(url);
-  const r = await fetch(url, { credentials: 'same-origin' });
-  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Error ${r.status}`);
-  const data = await r.json();
+  let data;
+  if (STATIC && site.meta?.protected) {
+    const r = await fetch(`${url}.bin`);
+    if (!r.ok) throw new Error(`Error ${r.status}`);
+    data = JSON.parse(new TextDecoder().decode(await decryptBuf(site.key, await r.arrayBuffer())));
+  } else {
+    const r = await fetch(url, { credentials: 'same-origin' });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Error ${r.status}`);
+    data = await r.json();
+  }
   if (STATIC) staticCache.set(url, data);
   return data;
 }
+
+// Exportaciones cifradas: se descifran en el navegador y se descargan como archivo.
+document.addEventListener('click', async (e) => {
+  const a = e.target.closest?.('a[data-file]');
+  if (!a || !(STATIC && site.meta?.protected)) return;
+  e.preventDefault();
+  const r = await fetch(`data/${a.dataset.file}.bin`);
+  const blob = new Blob([await decryptBuf(site.key, await r.arrayBuffer())]);
+  const url = URL.createObjectURL(blob);
+  const tmp = Object.assign(document.createElement('a'), { href: url, download: a.dataset.file });
+  document.body.appendChild(tmp); tmp.click(); tmp.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
 
 async function api(path) {
   if (!STATIC) return getJson(path);
@@ -542,6 +634,7 @@ function activeTabs() {
 }
 
 async function init() {
+  if (STATIC) await unlock();
   try {
     [state.me, state.overview, state.sources] = await Promise.all([api('/api/me'), api('/api/overview'), api('/api/sources')]);
   } catch (e) {

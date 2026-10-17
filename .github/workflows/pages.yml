@@ -24,8 +24,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      PRIVATE_MODE: "0"
-      PUBLIC_SITE: "1"
       NOTIFY: "0"
     steps:
       - uses: actions/checkout@v4
@@ -40,7 +38,13 @@ jobs:
         run: npm run update:public || echo "::warning::Alguna fuente falló; ver la bitácora de este paso."
       - name: Cargar notas de mercado verificadas
         run: for f in notas/*.json; do node scripts/add-notes.js --file "$f"; done
-      - run: npm run build:static
+      - name: Generar sitio cifrado con contraseña
+        # El usuario y la contraseña viven sólo en los secretos del repositorio (Settings → Secrets → Actions).
+        # Sin ellos el paso falla y no se publica nada sin protección.
+        env:
+          SITE_USER: ${{ secrets.SITE_USER }}
+          SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
+        run: npm run build:static
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
