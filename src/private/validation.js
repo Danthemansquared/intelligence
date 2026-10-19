@@ -24,6 +24,7 @@ export const VIRTUAL = [{
 }];
 
 const memo = new Map();
+export function clearMemo() { memo.clear(); }
 /** Serie diaria de una fuente real (base pública) o virtual (estimación calculada). */
 export function seriesFor(sourceId, product, { gap = 1 } = {}) {
   const v = VIRTUAL.find((x) => x.id === sourceId);

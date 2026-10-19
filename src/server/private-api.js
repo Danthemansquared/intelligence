@@ -1,10 +1,16 @@
 // Entorno A — rutas privadas. Sólo accesibles para rol validador con privateMode.
-import { comparisonFor, lastComparable, diffHistory, fullStats, lpgSources, LPG, estimateStats, seriesFor, VIRTUAL } from '../private/validation.js';
+import { comparisonFor, lastComparable, diffHistory, fullStats, lpgSources, LPG, estimateStats, seriesFor, VIRTUAL, clearMemo } from '../private/validation.js';
 import { variations } from '../core/metrics.js';
 import { officialCoverage, lastImport } from '../db/private.js';
 import { isIsoDate, addMonths, todayHouston } from '../core/dates.js';
 
 let statsCache = { at: 0, data: null };
+
+/** Tras una actualización de datos, se recalcula todo en la siguiente consulta. */
+export function invalidate() {
+  statsCache = { at: 0, data: null };
+  clearMemo();
+}
 
 function stats() {
   // Cálculo costoso (≈26 años diarios): se reutiliza 10 minutos.

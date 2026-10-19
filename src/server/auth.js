@@ -39,3 +39,12 @@ export function identify(req, cfg = settings, roles = null) {
 export function canSeePrivate(identity, cfg = settings) {
   return Boolean(cfg.privateMode && identity?.role && cfg.privateRoles.includes(identity.role));
 }
+
+/**
+ * Quién puede lanzar la actualización de datos públicos (botón «Actualizar»).
+ * Local: el usuario de esta computadora. Proxy: sólo el rol validador.
+ */
+export function canRefresh(identity, cfg = settings) {
+  if (!identity?.role) return false;
+  return cfg.authMode === 'local' || identity.role === 'validador';
+}

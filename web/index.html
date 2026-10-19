@@ -22,6 +22,7 @@
       <div class="top-meta">
         <span class="badge" id="role-badge" hidden></span>
         <span class="meta" id="last-update"></span>
+        <button type="button" class="refresh" id="refresh" hidden title="Descargar de nuevo los precios públicos (EIA, FRED, BLS). Los precios AMEXGAS se cargan aparte."><span class="refresh-icon" aria-hidden="true">↻</span><span class="refresh-label">Actualizar</span></button>
         <button type="button" class="link-button" id="sign-out" hidden>Cerrar sesión</button>
       </div>
     </div>
@@ -155,6 +156,7 @@
     </form>
   </div>
 
+ <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <div id="tooltip" class="tooltip" role="status" aria-live="polite" hidden></div>
   <script type="module" src="app.js"></script>
 </body>

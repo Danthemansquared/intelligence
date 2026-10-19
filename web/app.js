@@ -633,10 +633,71 @@ function activeTabs() {
   update();
 }
 
+/** Descarga los datos que usa la página (públicos y, si aplica, privados). */
+async function loadData() {
+  [state.me, state.overview, state.sources] = await Promise.all([api('/api/me'), api('/api/overview'), api('/api/sources')]);
+  if (state.me.canSeePrivate) {
+    try {
+      [state.priv, state.stats] = await Promise.all([api('/api/private/summary'), api('/api/private/stats')]);
+    } catch {
+      console.warn('Sección privada no disponible');
+    }
+  }
+}
+
+/** Dibuja todas las secciones con el estado actual (se reutiliza tras «Actualizar»). */
+async function renderAll() {
+  renderSummary();
+  const jobs = [renderGlp(), renderCrude(), renderMarket(), renderQuality()];
+  if (state.stats) jobs.push(renderPrecision());
+  await Promise.allSettled(jobs);
+}
+
+function toast(html, kind = '') {
+  const t = $('#toast');
+  t.className = `toast ${kind}`;
+  t.innerHTML = html;
+  t.hidden = false;
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => { t.hidden = true; }, kind === 'error' ? 12000 : 8000);
+}
+
+/** Botón «Actualizar»: vuelve a descargar las fuentes públicas en el servidor y redibuja. */
+async function refreshData() {
+  const btn = $('#refresh');
+  btn.disabled = true;
+  btn.classList.add('busy');
+  btn.querySelector('.refresh-label').textContent = 'Actualizando…';
+  try {
+    const r = await fetch('/api/refresh', { method: 'POST', headers: { 'X-Requested-With': 'dashboard' }, credentials: 'same-origin' });
+    const out = await r.json();
+    if (!r.ok) throw new Error(out.error || `Error ${r.status}`);
+    staticCache.clear();
+    await loadData();
+    await renderAll();
+    const fresh = out.results.filter((x) => x.status === 'ok').length;
+    const same = out.results.filter((x) => x.status === 'sin_cambios').length;
+    const failed = out.results.filter((x) => x.status === 'error');
+    const name = (id) => state.sources.find((s) => s.id === id)?.shortName ?? id;
+    const parts = !fresh && same
+      ? 'Todas las fuentes respondieron; ninguna ha publicado datos más recientes. La EIA publica su entrega semanal los miércoles.'
+      : [fresh ? `${fresh} ${fresh === 1 ? 'fuente con datos nuevos' : 'fuentes con datos nuevos'}` : null, same ? `${same} sin datos nuevos` : null].filter(Boolean).join(' · ');
+    const official = out.official?.lastDate ? `<div class="toast-sub">Precios AMEXGAS cargados hasta el ${fmtDate(out.official.lastDate)}. Se actualizan sólo cuando subes un archivo.</div>` : '';
+    toast(`<b>${failed.length ? 'Actualización con fallas' : 'Datos actualizados'}</b><div>${esc(parts || 'Sin fuentes consultadas')}</div>${
+      failed.length ? `<div class="toast-sub">No respondieron: ${failed.map((f) => esc(name(f.source))).join(', ')}. Se conserva el último dato.</div>` : ''}${official}`, failed.length ? 'warn' : '');
+  } catch (e) {
+    toast(`<b>No se pudo actualizar</b><div>${esc(e.message)}</div>`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('busy');
+    btn.querySelector('.refresh-label').textContent = 'Actualizar';
+  }
+}
+
 async function init() {
   if (STATIC) await unlock();
   try {
-    [state.me, state.overview, state.sources] = await Promise.all([api('/api/me'), api('/api/overview'), api('/api/sources')]);
+    await loadData();
   } catch (e) {
     $('#resumen-lede').textContent = `No se pudo cargar el dashboard: ${e.message}`;
     return;
@@ -647,19 +708,14 @@ async function init() {
     badge.textContent = 'Validación privada activa';
     badge.classList.add('private');
     document.querySelectorAll('[data-private]').forEach((n) => { n.hidden = false; });
-    try {
-      [state.priv, state.stats] = await Promise.all([api('/api/private/summary'), api('/api/private/stats')]);
-    } catch (e) {
-      console.warn('Sección privada no disponible');
-    }
   } else badge.textContent = 'Vista general';
-  renderSummary();
-  const jobs = [renderGlp(), renderCrude(), renderMarket(), renderQuality()];
-  if (state.stats) {
-    $('#day-date').addEventListener('change', renderDay);
-    jobs.push(renderPrecision());
+  // El sitio público (estático) se actualiza solo; el botón existe sólo con servidor.
+  if (!STATIC && state.me.canRefresh) {
+    $('#refresh').hidden = false;
+    $('#refresh').addEventListener('click', refreshData);
   }
-  await Promise.allSettled(jobs);
+  if (state.stats) $('#day-date').addEventListener('change', renderDay);
+  await renderAll();
   activeTabs();
   let rt;
   window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { renderGlp(); renderCrude(); if (state.stats) renderDiffChart(); }, 200); });

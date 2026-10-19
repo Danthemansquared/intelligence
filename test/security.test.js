@@ -102,3 +102,30 @@ test('Servidor rechaza métodos de escritura y rutas fuera de web/', async () =>
   const t = await get('/..%2Fprivate%2Fofficial.db');
   assert.equal(t.status, 404);
 });
+
+test('Actualizar: sólo POST, con encabezado propio y mismo origen; lector en proxy no puede', async () => {
+  const { setRefreshImpl } = await import('../src/server/server.js');
+  let calls = 0;
+  setRefreshImpl(async () => { calls++; return [{ source: 'x', status: 'sin_cambios' }]; });
+  overrideSettings({ authMode: 'local', localRole: 'validador', privateMode: true });
+  const post = (headers = {}) => fetch(`${base}/api/refresh`, { method: 'POST', headers });
+  assert.equal((await fetch(`${base}/api/refresh`)).status, 405); // GET no permitido
+  assert.equal((await post()).status, 403); // sin encabezado (posible CSRF)
+  assert.equal((await post({ 'X-Requested-With': 'dashboard', Origin: 'https://sitio-malicioso.example' })).status, 403);
+  const ok = await post({ 'X-Requested-With': 'dashboard' });
+  assert.equal(ok.status, 200);
+  const body = await ok.json();
+  assert.equal(body.results[0].status, 'sin_cambios');
+  assert.ok('official' in body);
+  assert.equal(calls, 1);
+  setRefreshImpl(null);
+  overrideSettings({ authMode: 'local' });
+});
+
+test('canRefresh: local sí; proxy sólo validador', async () => {
+  const { canRefresh } = await import('../src/server/auth.js');
+  assert.equal(canRefresh({ role: 'lector' }, { ...settings, authMode: 'local' }), true);
+  assert.equal(canRefresh({ role: 'lector' }, { ...settings, authMode: 'proxy' }), false);
+  assert.equal(canRefresh({ role: 'validador' }, { ...settings, authMode: 'proxy' }), true);
+  assert.equal(canRefresh(null, settings), false);
+});

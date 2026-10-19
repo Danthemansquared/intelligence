@@ -355,3 +355,19 @@ body.locked > header, body.locked > main, body.locked > footer, body.locked > .s
 .gate-card .button:disabled { opacity: 0.6; }
 .gate-error { margin: 0; color: var(--bad-ink); font-size: 14px; }
 .link-button { font: inherit; font-size: 12px; color: var(--accent); background: none; border: 0; padding: 4px 0; cursor: pointer; }
+
+/* ───────────── Botón «Actualizar» y aviso (toast) ───────────── */
+.refresh { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 13px; font-weight: 500; letter-spacing: -0.01em; color: var(--accent); background: var(--fill); border: 0; border-radius: 999px; padding: 5px 12px 5px 10px; min-height: 30px; cursor: pointer; transition: background-color 200ms var(--ease), transform 150ms var(--ease); }
+.refresh:hover { background: var(--fill-strong); }
+.refresh:active { transform: scale(0.96); }
+.refresh:disabled { cursor: progress; opacity: 0.8; }
+.refresh-icon { display: inline-block; font-size: 15px; line-height: 1; }
+.refresh.busy .refresh-icon { animation: spin 900ms linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.toast { position: fixed; z-index: 45; left: 50%; bottom: max(20px, env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(440px, calc(100% - 32px)); background: var(--tip-bg); backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px); box-shadow: var(--tip-shadow); border-radius: 16px; padding: 14px 16px; font-size: 14px; letter-spacing: -0.01em; animation: toastin 320ms var(--ease) both; }
+.toast b { display: block; font-weight: 600; margin-bottom: 2px; }
+.toast .toast-sub { color: var(--ink-2); font-size: 13px; margin-top: 6px; }
+.toast.warn b { color: var(--warn-ink); }
+.toast.error b { color: var(--bad-ink); }
+@keyframes toastin { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@media (max-width: 640px) { .refresh-label { display: none; } .refresh { padding: 5px 9px; } }

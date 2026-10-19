@@ -12,7 +12,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ROOT, settings } from '../config.js';
-import { identify, canSeePrivate } from './auth.js';
+import { identify, canSeePrivate, canRefresh } from './auth.js';
+import { runAll } from '../ingest/run.js';
 import * as pub from './public-api.js';
 
 const WEB = path.join(ROOT, 'web');
@@ -53,13 +54,16 @@ export async function handle(req, res) {
   const start = Date.now();
   res.on('finish', () => console.log(`${new Date().toISOString()} ${req.method} ${p} ${res.statusCode} ${Date.now() - start}ms`));
 
-  if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, { error: 'Método no permitido' });
+  // Sólo lectura, salvo la actualización de datos públicos.
+  const isRefresh = p === '/api/refresh';
+  if (isRefresh ? req.method !== 'POST' : req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, { error: 'Método no permitido' });
 
   const id = identify(req);
   if (id.error) return send(res, id.error, { error: id.reason });
 
   try {
-    if (p === '/api/me') return send(res, 200, { user: id.user, role: id.role, canSeePrivate: canSeePrivate(id), authMode: settings.authMode });
+    if (p === '/api/me') return send(res, 200, { user: id.user, role: id.role, canSeePrivate: canSeePrivate(id), canRefresh: canRefresh(id), authMode: settings.authMode });
+    if (isRefresh) return await refresh(req, res, id);
     if (p.startsWith('/api/private/')) {
       if (!canSeePrivate(id)) return send(res, 403, { error: 'No autorizado para consultar la comparación contra AMEXGAS.' });
       const api = await loadPrivate();
@@ -85,6 +89,37 @@ export async function handle(req, res) {
     console.error(`Error en ${p}: ${isPrivate ? '(detalle omitido por confidencialidad)' : e.stack}`);
     return send(res, 500, { error: 'Error interno al procesar la solicitud.' });
   }
+}
+
+let refreshing = null;
+let refreshImpl = runAll;
+/** Sólo para pruebas: reemplaza la descarga real por una simulada. */
+export function setRefreshImpl(fn) { refreshImpl = fn ?? runAll; }
+
+/**
+ * Botón «Actualizar»: descarga de nuevo todas las fuentes públicas (EIA, FRED/BLS…).
+ * Nunca toca los precios oficiales, que se cargan manualmente.
+ * Protección CSRF: exige un encabezado propio, que otro sitio no puede enviar sin
+ * autorización CORS, y un Origin igual al del servidor cuando el navegador lo manda.
+ */
+async function refresh(req, res, id) {
+  if (!canRefresh(id)) return send(res, 403, { error: 'No autorizado para actualizar los datos.' });
+  const origin = req.headers.origin;
+  if (req.headers['x-requested-with'] !== 'dashboard' || (origin && new URL(origin).host !== req.headers.host)) {
+    return send(res, 403, { error: 'Solicitud no permitida.' });
+  }
+  // Una sola actualización a la vez: si ya hay una en curso, se espera su resultado.
+  refreshing ??= refreshImpl().finally(() => { refreshing = null; });
+  const results = await refreshing;
+  if (privateApi?.invalidate) privateApi.invalidate();
+  let official = null;
+  if (canSeePrivate(id)) {
+    // Carga diferida: un despliegue sin modo privado nunca importa la base oficial.
+    const { lastImport } = await import('../db/private.js');
+    const li = lastImport();
+    official = li ? { lastDate: li.last_date, importedAt: li.imported_at } : null;
+  }
+  return send(res, 200, { finishedAt: new Date().toISOString(), results, official }, { 'Cache-Control': 'no-store' });
 }
 
 export function createServer() {
