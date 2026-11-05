@@ -129,3 +129,29 @@ test('canRefresh: local sí; proxy sólo validador', async () => {
   assert.equal(canRefresh({ role: 'validador' }, { ...settings, authMode: 'proxy' }), true);
   assert.equal(canRefresh(null, settings), false);
 });
+
+test('Cargar AMEXGAS: permisos, archivo inválido y carga de fechas nuevas sin modificar existentes', async () => {
+  const ExcelJS = (await import('exceljs')).default;
+  overrideSettings({ authMode: 'local', localRole: 'validador', privateMode: true });
+  const up = (body, headers = {}) => fetch(`${base}/api/private/import`, { method: 'POST', body, headers: { 'Content-Type': 'application/octet-stream', ...headers } });
+  assert.equal((await up(Buffer.from('x'))).status, 403); // sin encabezado propio
+  assert.equal((await up(Buffer.from('no es excel'), { 'X-Requested-With': 'dashboard' })).status, 422);
+  // Excel sintético con el formato de la hoja de precios diarios: una fecha existente con otro valor y una nueva.
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Hoja de prueba');
+  ws.addRow(['fecha', 'Día', 'Semana', 'Semana v-j', 'propano USDc/Gal', 'butano USDc/Gal', '', '', 'tipo de cambio']);
+  ws.addRow([new Date(Date.UTC(2026, 7, 4)), '', '', '', 99.5, 120, '', '', 18.5]); // ya existe propano 2026-08-04
+  ws.addRow([new Date(Date.UTC(2026, 7, 5)), '', '', '', 88, 101, '', '', 18.6]);
+  const buf = Buffer.from(await wb.xlsx.writeBuffer());
+  const r = await up(buf, { 'X-Requested-With': 'dashboard', 'X-File-Name': encodeURIComponent('precios-prueba.xlsx') });
+  assert.equal(r.status, 200);
+  const { summary } = await r.json();
+  assert.equal(summary.differing, 1);         // el valor distinto del 4-ago no se tocó
+  assert.equal(summary.lastDate, '2026-08-05');
+  assert.ok(!JSON.stringify(summary).includes('99.5') && !JSON.stringify(summary).includes('88'));
+  const after = JSON.parse((await get('/api/private/summary?date=2026-08-04')).text);
+  assert.ok(Math.abs(after.products.propano[0].current.official - SECRET) < 1e-9);
+  overrideSettings({ localRole: 'lector' });
+  assert.equal((await up(buf, { 'X-Requested-With': 'dashboard' })).status, 403);
+  overrideSettings({ localRole: 'validador' });
+});

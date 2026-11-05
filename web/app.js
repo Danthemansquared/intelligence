@@ -133,7 +133,7 @@ async function api(path) {
   return getJson(`data/${u.pathname.replace('/api/', '')}.json`);
 }
 
-const state = { me: null, overview: null, sources: [], priv: null, stats: null, glpProduct: 'propano', glpRange: 12, crudeRange: 12, precProduct: 'propano', precSource: null, diffRange: 12 };
+const state = { me: null, overview: null, sources: [], priv: null, stats: null, mix: null, mixRatio: '90-10', glpProduct: 'propano', glpRange: 12, crudeRange: 12, precProduct: 'propano', precSource: null, diffRange: 12 };
 const RANGES = [[1, '1M'], [3, '3M'], [12, '1A'], [60, '5A']];
 
 function monthsAgo(n) {
@@ -365,6 +365,80 @@ function renderSummary() {
     : '';
   const lu = state.overview.lastUpdate;
   $('#last-update').textContent = lu ? `Actualizado ${new Date(lu).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}` : 'Sin actualizaciones registradas';
+}
+
+// ───────────────────────────── Mezcla (privado) ─────────────────────────────
+
+const weekLabel = (w) => `${fmtDate(w.week).replace(/ \d{4}$/, '')} – ${fmtDate(w.end)}`;
+const mxn = (v) => `${num(v, 2)} MXN/kg`;
+
+async function renderMix() {
+  segmented($('#mix-ratio'), [['90-10', '90/10'], ['89-11', '89/11'], ['60-40', '60/40']], state.mixRatio, (v) => { state.mixRatio = v; renderMix(); });
+  const m = state.mix = await api(`/api/private/mix?ratio=${state.mixRatio}`);
+  const f = m.forecast;
+  if (!f) {
+    $('#mix-lede').textContent = 'Se necesitan al menos dos semanas completas de precios AMEXGAS para calcular la referencia.';
+    for (const id of ['#mix-kpis', '#mix-table', '#mix-message']) $(id).innerHTML = '';
+    return;
+  }
+  const dir = f.change > 0 ? 'un incremento' : f.change < 0 ? 'un decremento' : 'sin cambio';
+  const what = `<strong>${dir} de ${num(Math.abs(f.change * 100), 1)} centavos por kg</strong> en la referencia (mezcla ${m.label}): el promedio de la semana ${weekLabel(f.t1)} fue ${mxn(f.t1.value)}, contra ${mxn(f.t2.value)} la semana anterior.`;
+  $('#mix-lede').innerHTML = f.upToDate
+    ? `Esta semana se estima ${what}${f.consecutive ? '' : ' Atención: las dos semanas comparadas no son consecutivas.'}`
+    : `Con los últimos precios AMEXGAS cargados se calculó ${what} <span class="warn-text">Para el pronóstico de esta semana faltan precios AMEXGAS desde el ${fmtDate(m.lastOfficial)}: usa «Cargar AMEXGAS».</span>`;
+  $('#mix-kpis').innerHTML = [
+    kpi(f.upToDate ? 'Referencia esta semana' : 'Última referencia calculada', `${arrowOf(f.change)}${signed(f.change * 100, 1)}`, 'centavos/kg', `${pct(f.changePct, 2)} vs. semana previa`),
+    kpi(`Mezcla ${m.label} · semana ${weekLabel(f.t1)}`, num(f.t1.value, 2), 'MXN/kg', `Semana previa: ${mxn(f.t2.value)} · ${f.t1.n} días con precio`),
+    kpi('Propano y butano MB', `${pct(f.propanoPct, 1)}`, '', `Butano: ${pct(f.butanoPct, 1)} · promedios semanales en cUSD/gal`),
+    kpi('Tipo de cambio', num(f.t1.fx, 2), 'MXN/USD', `${pct(f.fxPct, 2)} vs. semana previa (${num(f.t2.fx, 2)})`),
+  ].join('');
+  // Gráfica: promedios semanales oficiales y, si hay, semanas estimadas con precios públicos.
+  const est = m.estimated.weeks.filter((w) => w.week > (m.weeks.at(-1)?.week ?? ''));
+  lineChart($('#mix-chart'), {
+    series: [{ name: `Mezcla ${m.label} (AMEXGAS)`, cls: 'c1', rows: m.weeks.map((w) => [w.week, w.value]) },
+      ...(est.length ? [{ name: 'Estimado con precios públicos', cls: 'c2', rows: [[m.weeks.at(-1).week, m.weeks.at(-1).value], ...est.map((w) => [w.week, w.value])] }] : [])],
+    unit: 'MXN/kg', decimals: 2, maxGapDays: 10, ariaLabel: `Promedio semanal de la mezcla ${m.label}`,
+  });
+  $('#mix-note').textContent = `Cada punto es el promedio de viernes a jueves. Tipo de cambio: ${m.fxSources.includes('archivo') ? 'el de tus archivos AMEXGAS' : 'FRED'}${m.fxSources.some((x) => x.startsWith('FRED')) ? ' y FRED donde falta' : ''}. Último precio AMEXGAS: ${fmtDate(m.lastOfficial)}.`;
+  $('#mix-message').textContent = m.message;
+  const rows = [...m.weeks].reverse().slice(0, 8);
+  $('#mix-table').innerHTML = `<div class="table-wrap"><table><thead><tr><th>Semana (vie–jue)</th><th class="n">Días</th><th class="n">Propano cUSD/gal</th><th class="n">Butano cUSD/gal</th><th class="n">Tipo de cambio</th><th class="n">Mezcla MXN/kg</th><th class="n">Cambio centavos/kg</th></tr></thead><tbody>${
+    [...est.reverse().map((w) => ({ ...w, est: true })), ...rows].map((w, i, arr) => {
+      const prev = arr[i + 1];
+      return `<tr class="${w.est ? 'est' : ''}"><td>${weekLabel(w)}${w.est ? ' · estimado' : ''}</td><td class="n">${w.n}</td><td class="n">${num(w.propano, 2)}</td><td class="n">${num(w.butano, 2)}</td><td class="n">${num(w.fx, 4)}</td><td class="n"><b>${num(w.value, 4)}</b></td><td class="n">${prev ? signed((w.value - prev.value) * 100, 2) : '—'}</td></tr>`;
+    }).join('')}</tbody></table></div>`;
+}
+
+$('#mix-copy')?.addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('#mix-message').textContent); toast('<b>Mensaje copiado</b><div>Listo para pegar en WhatsApp o correo.</div>'); }
+  catch { toast('<b>No se pudo copiar</b><div>Selecciona el texto y cópialo manualmente.</div>', 'error'); }
+});
+
+/** «Cargar AMEXGAS»: sube un Excel al servidor local, que sólo agrega fechas nuevas. */
+async function uploadOfficial(file) {
+  const label = $('#upload .refresh-label');
+  $('#upload').classList.add('busy');
+  label.textContent = 'Cargando…';
+  try {
+    const r = await fetch('/api/private/import', {
+      method: 'POST', body: file, credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'dashboard', 'Content-Type': 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name) },
+    });
+    const out = await r.json();
+    if (!r.ok) throw new Error(out.error || `Error ${r.status}`);
+    await loadData();
+    await renderAll();
+    const s = out.summary;
+    toast(`<b>${s.added ? 'Precios AMEXGAS actualizados' : 'Sin fechas nuevas'}</b><div>${s.added ? `${s.addedDays} días nuevos de propano y butano` : 'El archivo no trae días posteriores a los ya cargados'}${s.lastDate ? ` · base hasta el ${fmtDate(s.lastDate)}` : ''}.</div>${
+      s.differing ? `<div class="toast-sub">${s.differing} valores ya cargados son distintos en el archivo y no se modificaron.</div>` : ''}${
+      s.sheets ? `<div class="toast-sub">Hojas leídas: ${esc(s.sheets.join(', '))}.</div>` : ''}`, s.added ? '' : 'warn');
+  } catch (e) {
+    toast(`<b>No se pudo cargar el archivo</b><div>${esc(e.message)}</div>`, 'error');
+  } finally {
+    $('#upload').classList.remove('busy');
+    label.textContent = 'Cargar AMEXGAS';
+    $('#upload-file').value = '';
+  }
 }
 
 // ───────────────────────────── Gráficas de precio ─────────────────────────────
@@ -650,6 +724,7 @@ async function renderAll() {
   renderSummary();
   const jobs = [renderGlp(), renderCrude(), renderMarket(), renderQuality()];
   if (state.stats) jobs.push(renderPrecision());
+  if (state.me.canSeePrivate) jobs.push(renderMix());
   await Promise.allSettled(jobs);
 }
 
@@ -713,6 +788,10 @@ async function init() {
   if (!STATIC && state.me.canRefresh) {
     $('#refresh').hidden = false;
     $('#refresh').addEventListener('click', refreshData);
+  }
+  if (!STATIC && state.me.canSeePrivate) {
+    $('#upload').hidden = false;
+    $('#upload-file').addEventListener('change', (e) => { if (e.target.files[0]) uploadOfficial(e.target.files[0]); });
   }
   if (state.stats) $('#day-date').addEventListener('change', renderDay);
   await renderAll();

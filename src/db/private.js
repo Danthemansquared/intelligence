@@ -20,6 +20,12 @@ CREATE TABLE IF NOT EXISTS official_prices (
   imported_at TEXT NOT NULL,
   PRIMARY KEY (product, quote_date)
 );
+CREATE TABLE IF NOT EXISTS fx_rates (       -- tipo de cambio MXN/USD usado en los archivos oficiales
+  quote_date TEXT PRIMARY KEY,
+  mxn_per_usd REAL NOT NULL,
+  source_file TEXT NOT NULL,
+  imported_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS import_log (   -- sin valores, sólo metadatos
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   imported_at TEXT NOT NULL, source_file TEXT NOT NULL,
@@ -57,13 +63,13 @@ export function upsertOfficial(rows, sourceFile, { onlyNew = false } = {}) {
   const ins = d.prepare('INSERT INTO official_prices VALUES (?,?,?,?,?,?)');
   const upd = d.prepare('UPDATE official_prices SET value=?, source_file=?, imported_at=? WHERE product=? AND quote_date=?');
   const now = new Date().toISOString();
-  let added = 0, changed = 0, kept = 0;
+  let added = 0, changed = 0, kept = 0, keptDifferent = 0;
   d.exec('BEGIN');
   try {
     for (const r of rows) {
       const cur = get.get(r.product, r.quoteDate);
       if (!cur) { ins.run(r.product, r.quoteDate, r.value, 'cUSD/gal', sourceFile, now); added++; }
-      else if (onlyNew) kept++;
+      else if (onlyNew) { kept++; if (Math.abs(cur.value - r.value) > 1e-9) keptDifferent++; }
       else if (Math.abs(cur.value - r.value) > 1e-9) { upd.run(r.value, sourceFile, now, r.product, r.quoteDate); changed++; }
     }
     d.exec('COMMIT');
@@ -71,7 +77,31 @@ export function upsertOfficial(rows, sourceFile, { onlyNew = false } = {}) {
     d.exec('ROLLBACK');
     throw new Error('Falló la escritura en la base privada (detalle omitido por confidencialidad).');
   }
-  return { added, changed, kept };
+  return { added, changed, kept, keptDifferent };
+}
+
+/** Tipo de cambio por fecha (se reemplaza si el archivo trae un valor distinto). */
+export function upsertFx(rows, sourceFile) {
+  const d = openPrivateDb();
+  const st = d.prepare(`INSERT INTO fx_rates VALUES (?,?,?,?) ON CONFLICT(quote_date) DO UPDATE SET
+    mxn_per_usd=excluded.mxn_per_usd, source_file=excluded.source_file, imported_at=excluded.imported_at
+    WHERE abs(fx_rates.mxn_per_usd - excluded.mxn_per_usd) > 1e-9`);
+  const now = new Date().toISOString();
+  let n = 0;
+  d.exec('BEGIN');
+  try {
+    for (const r of rows) n += Number(st.run(r.quoteDate, r.value, sourceFile, now).changes);
+    d.exec('COMMIT');
+  } catch {
+    d.exec('ROLLBACK');
+    throw new Error('Falló la escritura del tipo de cambio en la base privada.');
+  }
+  return n;
+}
+
+export function fxMap() {
+  const rows = openPrivateDb().prepare('SELECT quote_date, mxn_per_usd FROM fx_rates ORDER BY quote_date').all();
+  return new Map(rows.map((r) => [r.quote_date, r.mxn_per_usd]));
 }
 
 export function logImport(entry) {

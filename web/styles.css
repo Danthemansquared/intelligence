@@ -371,3 +371,14 @@ body.locked > header, body.locked > main, body.locked > footer, body.locked > .s
 .toast.error b { color: var(--bad-ink); }
 @keyframes toastin { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
 @media (max-width: 640px) { .refresh-label { display: none; } .refresh { padding: 5px 9px; } }
+
+/* ───────────── Mezcla ───────────── */
+.message { white-space: pre-wrap; font: inherit; font-size: 14px; line-height: 1.5; color: var(--ink); background: var(--fill); border-radius: var(--r-inner); padding: 14px 16px; margin: 0; letter-spacing: -0.01em; }
+.upload { cursor: pointer; }
+.upload input { display: none; }
+td.est, .est { color: var(--ink-2); font-style: italic; }
+.warn-text { color: var(--warn-ink); font-weight: 500; }
+@media (max-width: 640px) {
+  .badge.private { font-size: 0; padding: 5px; gap: 0; }
+  .badge:not(.private) { display: none; }
+}

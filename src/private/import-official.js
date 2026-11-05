@@ -10,7 +10,7 @@
 import ExcelJS from 'exceljs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { upsertOfficial, logImport, officialCoverage } from '../db/private.js';
+import { upsertOfficial, upsertFx, logImport, officialCoverage } from '../db/private.js';
 import { isPlausible } from '../core/units.js';
 import { isWeekend, todayHouston } from '../core/dates.js';
 
@@ -31,6 +31,7 @@ export const PROFILES = [
     headers: { 1: 'fecha', 5: 'propano usdc/gal', 6: 'butano usdc/gal' },
     date: 1,
     cols: { propano: [5], butano: [6] },
+    fx: { col: 9, header: 'tipo de cambio' }, // MXN/USD, para calcular la mezcla en $/kg
     unit: 'cUSD/gal',
   },
 ];
@@ -62,6 +63,8 @@ function toIso(v) {
 export function extractRows(sheet, profile, today = todayHouston()) {
   const rows = [];
   const stats = { read: 0, rejected: 0, conflicts: 0, duplicates: 0, future: 0, weekend: 0, outOfRange: 0, empty: 0, badDate: 0 };
+  const fx = [];
+  const hasFx = profile.fx && norm(cellValue(sheet.getRow(1).getCell(profile.fx.col))) === profile.fx.header;
   sheet.eachRow((row, i) => {
     if (i === 1) return;
     stats.read++;
@@ -69,6 +72,10 @@ export function extractRows(sheet, profile, today = todayHouston()) {
     if (!date) { stats.badDate++; return; }
     if (date > today) { stats.future++; return; }
     if (isWeekend(date)) stats.weekend++;
+    if (hasFx) {
+      const v = cellValue(row.getCell(profile.fx.col));
+      if (typeof v === 'number' && v > 5 && v < 60) fx.push({ quoteDate: date, value: v });
+    }
     for (const [product, cols] of Object.entries(profile.cols)) {
       const vals = cols.map((c) => cellValue(row.getCell(c))).filter((v) => typeof v === 'number' && Number.isFinite(v));
       if (!vals.length) { stats.empty++; continue; }
@@ -92,27 +99,44 @@ export function extractRows(sheet, profile, today = todayHouston()) {
     if (group.every((r) => Math.abs(r.value - group[0].value) < 1e-9)) out.push(group[0]);
     else { stats.rejected += group.length; stats.duplicateDates.push(`${group[0].product} ${group[0].quoteDate}`); }
   }
-  return { rows: out, stats };
+  // Tipo de cambio: si una fecha se repite con valores distintos, se descarta.
+  const fxBy = new Map();
+  for (const r of fx) fxBy.set(r.quoteDate, fxBy.has(r.quoteDate) && Math.abs(fxBy.get(r.quoteDate) - r.value) > 1e-9 ? null : r.value);
+  const fxRows = [...fxBy].filter(([, v]) => v != null).map(([quoteDate, value]) => ({ quoteDate, value }));
+  return { rows: out, stats, fxRows };
 }
 
-export async function importFile(file, { sheet: onlySheet, onlyNew = false } = {}) {
+export async function importFile(file, opts = {}) {
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(file);
+  return importWorkbook(wb, file, opts);
+}
+
+/** Igual que importFile, pero desde los bytes de un archivo subido en la app. */
+export async function importBuffer(buffer, fileName, opts = {}) {
+  const wb = new ExcelJS.Workbook();
+  try { await wb.xlsx.load(buffer); } catch { throw new Error('El archivo no es un Excel (.xlsx) válido.'); }
+  return importWorkbook(wb, fileName, opts);
+}
+
+async function importWorkbook(wb, file, { sheet: onlySheet, onlyNew = false } = {}) {
   const results = [];
   for (const sheet of wb.worksheets) {
     if (onlySheet && sheet.name !== onlySheet) continue;
     const profile = detectProfile(sheet);
     if (!profile) continue;
-    const { rows, stats } = extractRows(sheet, profile);
-    const { added, changed, kept } = upsertOfficial(rows, path.basename(file), { onlyNew });
+    const { rows, stats, fxRows } = extractRows(sheet, profile);
+    const { added, changed, kept, keptDifferent } = upsertOfficial(rows, path.basename(file), { onlyNew });
+    const fxChanged = fxRows.length ? upsertFx(fxRows, path.basename(file)) : 0;
     const dates = rows.map((r) => r.quoteDate).sort();
     const entry = {
       sourceFile: `${path.basename(file)} › ${sheet.name}`, rowsRead: stats.read, rowsNew: added, rowsChanged: changed,
       rowsRejected: stats.rejected, firstDate: dates[0] ?? null, lastDate: dates.at(-1) ?? null,
-      note: `perfil ${profile.id}; fines de semana ${stats.weekend}; futuras ${stats.future}; conflictos ${stats.conflicts}; fechas repetidas ${stats.duplicates}${stats.duplicateDates.length ? ` (descartadas por valores distintos: ${stats.duplicateDates.join(', ')})` : ''}; fuera de rango ${stats.outOfRange}${onlyNew ? `; existentes no modificadas ${kept} (modo --only-new)` : ''}`,
+      note: `perfil ${profile.id}; fines de semana ${stats.weekend}; futuras ${stats.future}; conflictos ${stats.conflicts}; fechas repetidas ${stats.duplicates}${stats.duplicateDates.length ? ` (descartadas por valores distintos: ${stats.duplicateDates.join(', ')})` : ''}; fuera de rango ${stats.outOfRange}${onlyNew ? `; existentes no modificadas ${kept} (modo --only-new)` : ''}${fxRows.length ? `; tipo de cambio: ${fxRows.length} días (${fxChanged} nuevos o corregidos)` : ''}`,
     };
     logImport(entry);
-    results.push({ sheet: sheet.name, profile: profile.id, valid: rows.length, ...entry, stats });
+    const newDates = new Set(rows.map((r) => r.quoteDate));
+    results.push({ sheet: sheet.name, profile: profile.id, valid: rows.length, keptDifferent, validDates: newDates.size, ...entry, stats });
   }
   if (!results.length) throw new Error(`No se reconoció ningún formato en ${path.basename(file)}. Revise PROFILES en import-official.js.`);
   return results;

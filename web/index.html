@@ -22,12 +22,14 @@
       <div class="top-meta">
         <span class="badge" id="role-badge" hidden></span>
         <span class="meta" id="last-update"></span>
+        <label class="refresh upload" id="upload" hidden title="Cargar un Excel con precios AMEXGAS (hoja de precios diarios de propano y butano). Sólo agrega fechas nuevas; el archivo no sale de esta computadora."><span class="refresh-icon" aria-hidden="true">⇪</span><span class="refresh-label">Cargar AMEXGAS</span><input type="file" id="upload-file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden></label>
         <button type="button" class="refresh" id="refresh" hidden title="Descargar de nuevo los precios públicos (EIA, FRED, BLS). Los precios AMEXGAS se cargan aparte."><span class="refresh-icon" aria-hidden="true">↻</span><span class="refresh-label">Actualizar</span></button>
         <button type="button" class="link-button" id="sign-out" hidden>Cerrar sesión</button>
       </div>
     </div>
     <nav class="wrap tabs" aria-label="Secciones">
       <a href="#resumen" class="tab">Resumen</a>
+      <a href="#mezcla" class="tab" data-private hidden>Mezcla</a>
       <a href="#glp" class="tab">GLP</a>
       <a href="#precision" class="tab" data-private hidden>Precisión vs. AMEXGAS</a>
       <a href="#crudo" class="tab">Crudo</a>
@@ -49,6 +51,21 @@
         <div class="card"><span class="sk sk-title"></span><span class="sk sk-num"></span><span class="sk sk-line"></span></div>
       </div>
       <div id="alerts"></div>
+    </section>
+
+    <section id="mezcla" aria-labelledby="h-mezcla" data-private hidden>
+      <div class="section-head">
+        <h2 id="h-mezcla" class="section-title">Mezcla y referencia semanal</h2>
+        <div class="controls"><div class="segmented" role="radiogroup" aria-label="Mezcla" id="mix-ratio"></div></div>
+      </div>
+      <p class="private-note">Sección privada: calculada con precios AMEXGAS.</p>
+      <p class="section-lede" id="mix-lede"></p>
+      <div class="grid kpi-grid" id="mix-kpis"></div>
+      <div class="grid two">
+        <div class="card chart-card"><div class="card-head"><h3>Promedio semanal (viernes a jueves)</h3></div><div class="chart" id="mix-chart"></div><p class="footnote" id="mix-note"></p></div>
+        <div class="card"><div class="card-head"><h3>Mensaje para compartir</h3><button type="button" class="button" id="mix-copy">Copiar</button></div><pre class="message" id="mix-message"></pre></div>
+      </div>
+      <div class="card"><h3>Últimas semanas</h3><div id="mix-table"></div></div>
     </section>
 
     <section id="glp" aria-labelledby="h-glp">

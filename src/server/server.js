@@ -54,9 +54,11 @@ export async function handle(req, res) {
   const start = Date.now();
   res.on('finish', () => console.log(`${new Date().toISOString()} ${req.method} ${p} ${res.statusCode} ${Date.now() - start}ms`));
 
-  // Sólo lectura, salvo la actualización de datos públicos.
+  // Sólo lectura, salvo la actualización de datos públicos y la carga de archivos AMEXGAS.
   const isRefresh = p === '/api/refresh';
-  if (isRefresh ? req.method !== 'POST' : req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, { error: 'Método no permitido' });
+  const isImport = p === '/api/private/import';
+  const writes = isRefresh || isImport;
+  if (writes ? req.method !== 'POST' : req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, { error: 'Método no permitido' });
 
   const id = identify(req);
   if (id.error) return send(res, id.error, { error: id.reason });
@@ -64,6 +66,7 @@ export async function handle(req, res) {
   try {
     if (p === '/api/me') return send(res, 200, { user: id.user, role: id.role, canSeePrivate: canSeePrivate(id), canRefresh: canRefresh(id), authMode: settings.authMode });
     if (isRefresh) return await refresh(req, res, id);
+    if (isImport) return await importOfficial(req, res, id);
     if (p.startsWith('/api/private/')) {
       if (!canSeePrivate(id)) return send(res, 403, { error: 'No autorizado para consultar la comparación contra AMEXGAS.' });
       const api = await loadPrivate();
@@ -120,6 +123,58 @@ async function refresh(req, res, id) {
     official = li ? { lastDate: li.last_date, importedAt: li.imported_at } : null;
   }
   return send(res, 200, { finishedAt: new Date().toISOString(), results, official }, { 'Cache-Control': 'no-store' });
+}
+
+const MAX_UPLOAD = 25 * 1024 * 1024;
+
+function readBody(req, limit) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on('data', (c) => {
+      size += c.length;
+      if (size > limit) { reject(Object.assign(new Error('El archivo excede 25 MB.'), { status: 413 })); req.destroy(); return; }
+      chunks.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
+/**
+ * «Cargar AMEXGAS»: importa un Excel subido desde la app a la base privada.
+ * Sólo agrega fechas nuevas (no modifica valores ya cargados) y responde con
+ * conteos y fechas, nunca con precios. El archivo no se guarda en disco.
+ */
+async function importOfficial(req, res, id) {
+  if (!canSeePrivate(id)) return send(res, 403, { error: 'No autorizado para cargar precios oficiales.' });
+  const origin = req.headers.origin;
+  if (req.headers['x-requested-with'] !== 'dashboard' || (origin && new URL(origin).host !== req.headers.host)) {
+    return send(res, 403, { error: 'Solicitud no permitida.' });
+  }
+  let body;
+  try { body = await readBody(req, MAX_UPLOAD); } catch (e) { return send(res, e.status ?? 400, { error: e.message }); }
+  const name = decodeURIComponent(String(req.headers['x-file-name'] || 'archivo.xlsx')).replace(/[^\w .()-]/g, '_').slice(0, 120);
+  const { importBuffer } = await import('../private/import-official.js');
+  const { officialCoverage } = await import('../db/private.js');
+  let results;
+  try {
+    results = await importBuffer(body, name, { onlyNew: true });
+  } catch (e) {
+    // Mensajes propios del importador (formato no reconocido, Excel inválido); sin valores de celdas.
+    return send(res, 422, { error: e.message });
+  }
+  if (privateApi?.invalidate) privateApi.invalidate();
+  const cov = officialCoverage();
+  const summary = {
+    sheets: results.map((r) => r.sheet),
+    added: results.reduce((a, r) => a + r.rowsNew, 0),
+    addedDays: Math.max(...results.map((r) => Math.ceil(r.rowsNew / 2)), 0),
+    differing: results.reduce((a, r) => a + (r.keptDifferent ?? 0), 0),
+    rejected: results.reduce((a, r) => a + r.rowsRejected, 0),
+    lastDate: cov.map((c) => c.last_date).sort().at(-1) ?? null,
+  };
+  return send(res, 200, { summary }, { 'Cache-Control': 'no-store' });
 }
 
 export function createServer() {

@@ -19,13 +19,19 @@ cd <carpeta del proyecto>
 npm install
 ```
 
+## Mezcla y referencia semanal (vista privada)
+
+Replica la convención de los archivos de trabajo: USD/kg = cUSD/gal ÷ (2.0441214 × 100), $/kg = tipo de cambio × USD/kg, mezcla = propano × p + butano × (1 − p) para 90/10, 89/11 y 60/40. La referencia compara el promedio de la última semana completa (viernes a jueves) contra la anterior y genera el mensaje para compartir. Tipo de cambio: el de los archivos AMEXGAS; si falta, FRED (DEXMXUS). Si faltan precios AMEXGAS recientes, la app lo indica en lugar de presentar el cálculo como de esta semana.
+
 ## Uso diario
 
 | Acción | Comando |
 |---|---|
 | Iniciar el dashboard | `npm start` → http://127.0.0.1:3100 |
 | Actualizar precios digitales | `npm run update` (o `npm run update -- --source eia_propano`) |
-| Cargar/actualizar precios oficiales | `npm run import-official -- --file "/ruta/archivo.xlsx"` |
+| Cargar precios oficiales desde la app | Botón **Cargar AMEXGAS** (sólo agrega fechas nuevas; el archivo no sale de esta computadora) |
+| Descargar de nuevo los precios públicos | Botón **Actualizar** |
+| Cargar/actualizar precios oficiales (terminal) | `npm run import-official -- --file "/ruta/archivo.xlsx"` |
 | Sólo agregar fechas nuevas de una hoja | `npm run import-official -- --file "/ruta/archivo.xlsx" --sheet "Nombre de hoja" --only-new` |
 | Cotejar un Excel contra la base oficial (sin importar) | `npm run crosscheck-official -- --file "/ruta/archivo.xlsx"` |
 | Reporte privado de precisión y tolerancias | `npm run private-report` → `private/reporte-precision.md` |
